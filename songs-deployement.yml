@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: songs-service-deployment
+  namespace: k8s-program
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: songs-service
+  template:
+    metadata:
+      labels:
+        app: songs-service
+    spec:
+      containers:
+        - name: songs-service
+          image: ekirkilevics/songs-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+          env:
+            - name: SONGS_MS_NAME
+              value: "songs-ms"
+            - name: SONGS_MS_PORT
+              value: "8081"
+            - name: SONGS_DB_URL
+              value: "songs-db"
+            - name: SONGS_DB_PORT
+              value: "5432"
+            - name: ENABLE_EUREKA_CLIENT
+              value: "false"
+            - name: EUREKA_URI
+              value: "localhost"
+          volumeMounts:
+            - name: songs-storage
+              mountPath: /app/data
+      volumes:
+        - name: songs-storage
+          persistentVolumeClaim:
+            claimName: songs-pvc
