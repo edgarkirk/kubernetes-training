@@ -23,12 +23,39 @@ spec:
             - name: POSTGRES_DB
               value: "postgres"
             - name: POSTGRES_USER
-              value: "postgres"
+              valueFrom:
+                secretKeyRef:
+                  name: resources-db-secret
+                  key: username
             - name: POSTGRES_PASSWORD
-              value: "postgres"
+              valueFrom:
+                secretKeyRef:
+                  name: resources-db-secret
+                  key: password
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            failureThreshold: 20
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 5
+            failureThreshold: 3
           volumeMounts:
             - name: resources-db-storage
               mountPath: /var/lib/postgresql/data
+            - name: resources-db-init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: resources-db-init
+          configMap:
+            name: resources-db-init
   volumeClaimTemplates:
     - metadata:
         name: resources-db-storage

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: songs-service-config
+  namespace: k8s-program
+data:
+  SONGS_MS_NAME: "songs-ms"
+  SONGS_MS_PORT: "8081"
+  SONGS_DB_URL: "songs-db"
+  SONGS_DB_PORT: "5432"
+  ENABLE_EUREKA_CLIENT: "false"
+  EUREKA_URI: "localhost"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "*"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "update"

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resources-service-config
+  namespace: k8s-program
+data:
+  RESOURCES_MS_NAME: "resources-ms"
+  RESOURCES_MS_PORT: "8080"
+  SONGS_MS_URL: "songs-service"
+  SONGS_MS_PORT: "8081"
+  RESOURCES_DB_URL: "resources-db"
+  RESOURCES_DB_PORT: "5432"
+  ENABLE_EUREKA_CLIENT: "false"
+  EUREKA_URI: "localhost"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "*"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "update"

@@ -5,6 +5,11 @@ metadata:
   namespace: k8s-program
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: resources-service
@@ -16,23 +21,35 @@ spec:
       containers:
         - name: resources-service
           image: ekirkilevics/resources-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: resources-service-config
           env:
-            - name: RESOURCES_MS_NAME
-              value: "resources-ms"
-            - name: RESOURCES_MS_PORT
-              value: "8080"
-            - name: SONGS_MS_URL
-              value: "songs-service"
-            - name: SONGS_MS_PORT
-              value: "8081"
-            - name: RESOURCES_DB_URL
-              value: "resources-db"
-            - name: RESOURCES_DB_PORT
-              value: "5432"
-            - name: ENABLE_EUREKA_CLIENT
-              value: "false"
-            - name: EUREKA_URI
-              value: "localhost"
+            - name: RESOURCES_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: resources-db-secret
+                  key: username
+            - name: RESOURCES_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: resources-db-secret
+                  key: password
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 3

@@ -1,3 +1,17 @@
+# Sub-task 4: Deployment history & rollback (without changing manifest files)
+#
+# View deployment history:
+#   kubectl rollout history deployment/songs-service-deployment -n k8s-program
+#
+# Roll back to previous version (v1 / latest):
+#   kubectl rollout undo deployment/songs-service-deployment -n k8s-program
+#
+# Roll forward to a specific revision:
+#   kubectl rollout undo deployment/songs-service-deployment -n k8s-program --to-revision=2
+#
+# Verify which image is running after rollback:
+#   kubectl describe deployment songs-service-deployment -n k8s-program | grep Image
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,6 +19,11 @@ metadata:
   namespace: k8s-program
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: songs-service
@@ -15,23 +34,39 @@ spec:
     spec:
       containers:
         - name: songs-service
-          image: ekirkilevics/songs-service:latest
-          imagePullPolicy: IfNotPresent
+          image: ekirkilevics/songs-service:2.0
+          imagePullPolicy: Always
           ports:
             - containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: songs-service-config
           env:
-            - name: SONGS_MS_NAME
-              value: "songs-ms"
-            - name: SONGS_MS_PORT
-              value: "8081"
-            - name: SONGS_DB_URL
-              value: "songs-db"
-            - name: SONGS_DB_PORT
-              value: "5432"
-            - name: ENABLE_EUREKA_CLIENT
-              value: "false"
-            - name: EUREKA_URI
-              value: "localhost"
+            - name: SONGS_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: songs-db-secret
+                  key: username
+            - name: SONGS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: songs-db-secret
+                  key: password
+          startupProbe:
+            tcpSocket:
+              port: 8081
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8081
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 8081
+            periodSeconds: 5
+            failureThreshold: 3
           volumeMounts:
             - name: songs-storage
               mountPath: /app/data
