@@ -1,34 +1,67 @@
-# Homework 2
+# Homework 3
 
-Kubernetes manifests for deploying a two-service app (resources + songs) with separate Postgres databases.
+Helm chart for deploying a two-service app (resources + songs) with separate Postgres databases.
 
-Everything runs in the `k8s-program` namespace.
+Chart: `kuber-training-chart/` — namespace and replica count are configurable via Helm values.
 
-## What's included
+## Chart structure
 
 | File | Description |
 |------|-------------|
-| `namespace.yml` | Namespace `k8s-program` |
-| `secrets.yml` | DB credentials for resources-db and songs-db |
-| `resources-service-configmap.yml` | Env vars for resources-service |
-| `songs-service-configmap.yml` | Env vars for songs-service |
-| `resources-db-configmap.yml` | Init SQL for resources DB (creates `resources` table) |
-| `songs-db-configmap.yml` | Init SQL for songs DB (creates `songs` table) |
-| `resources-db-statefulset.yml` | Postgres 17 StatefulSet for resources DB |
-| `songs-db-statefulset.yml` | Postgres 17 StatefulSet for songs DB |
-| `resources-db-service.yml` | ClusterIP service for resources DB |
-| `songs-db-service.yml` | ClusterIP service for songs DB |
-| `resources-deployment.yml` | resources-service Deployment (2 replicas, RollingUpdate) |
-| `songs-deployement.yml` | songs-service Deployment (2 replicas, RollingUpdate) |
-| `resource-service.yml` | NodePort service for resources-service |
-| `songs-service.yml` | NodePort service for songs-service |
-| `songs-pv.yml` | Manually provisioned PersistentVolume for songs-service |
-| `songs-pvc.yml` | PersistentVolumeClaim bound to songs-pv |
+| `Chart.yaml` | Chart metadata (name, version, appVersion) |
+| `values.yaml` | Default values: `replicaCount: 2`, `namespace: k8s-program` |
+| `templates/_helpers.tpl` | Shared label definitions (date, version) |
+| `templates/namespace.yml` | Namespace |
+| `templates/secrets.yml` | DB credentials for resources-db and songs-db |
+| `templates/resources-service-configmap.yml` | Env vars for resources-service (includes helper labels) |
+| `templates/songs-service-configmap.yml` | Env vars for songs-service |
+| `templates/resources-db-configmap.yml` | Init SQL for resources DB |
+| `templates/songs-db-configmap.yml` | Init SQL for songs DB |
+| `templates/resources-db-statefulset.yml` | Postgres 17 StatefulSet for resources DB |
+| `templates/songs-db-statefulset.yml` | Postgres 17 StatefulSet for songs DB |
+| `templates/resources-db-service.yml` | ClusterIP service for resources DB |
+| `templates/songs-db-service.yml` | ClusterIP service for songs DB |
+| `templates/resources-deployment.yml` | resources-service Deployment |
+| `templates/songs-deployement.yml` | songs-service Deployment |
+| `templates/resource-service.yml` | NodePort service for resources-service |
+| `templates/songs-service.yml` | NodePort service for songs-service |
+| `templates/songs-pv.yml` | Manually provisioned PersistentVolume for songs-service |
+| `templates/songs-pvc.yml` | PersistentVolumeClaim bound to songs-pv |
 
-## How to deploy
+## Sub-task 1: Helm chart default variables
 
+`replicaCount` and `namespace` are Helm values defined in `values.yaml`:
+
+```yaml
+replicaCount: 2
+namespace: k8s-program
+```
+
+Deploy with default values:
 ```bash
-kubectl apply -f ./
+helm install kuber-training ./kuber-training-chart
+```
+
+Deploy with non-default values:
+```bash
+helm install kuber-training ./kuber-training-chart \
+  --set namespace=my-ns \
+  --set replicaCount=3
+```
+
+Verify pods are running:
+```bash
+kubectl get pods -n k8s-program
+```
+
+Upgrade an existing release:
+```bash
+helm upgrade kuber-training ./kuber-training-chart
+```
+
+Uninstall:
+```bash
+helm uninstall kuber-training
 ```
 
 Fix PersistentVolume if `songs-pvc` stays Pending (after namespace recreate):
@@ -36,80 +69,38 @@ Fix PersistentVolume if `songs-pvc` stays Pending (after namespace recreate):
 kubectl patch pv songs-pv -p '{"spec":{"claimRef":null}}'
 ```
 
-Wait for all pods to be ready:
-```bash
-kubectl get pods -n k8s-program -w
+## Sub-task 2: Helm chart helpers
+
+`templates/_helpers.tpl` defines a named template with two labels:
+
+```gotemplate
+{{- define "kuber-training-chart.labels" -}}
+date: {{ now | date "2006-01-02" | quote }}
+version: {{ .Chart.AppVersion | quote }}
+{{- end }}
 ```
 
-## Sub-task 1: Secrets and ConfigMaps
+- `date` — generated at render time using Helm's `now` function
+- `version` — taken from `appVersion` in `Chart.yaml`
 
-- DB credentials stored in `secrets.yml` using `stringData` (K8s encodes internally)
-- App env vars stored in ConfigMaps loaded via `envFrom.configMapRef`
-- Init SQL scripts mounted into `/docker-entrypoint-initdb.d/` via ConfigMap volumes
-- StatefulSets load credentials via `secretKeyRef`
+`resources-service-configmap.yml` includes the labels:
 
-## Sub-task 2: Liveness and Readiness probes
-
-**App deployments** use `tcpSocket` probes (Actuator not on classpath):
-- `startupProbe` — 30 × 10s = 5min max startup time
-- `livenessProbe` — restarts pod if port stops responding
-- `readinessProbe` — removes pod from load balancer if not ready
-
-**DB StatefulSets** use `exec: pg_isready`:
-- `startupProbe` — 20 × 5s = 100s max
-- `livenessProbe` / `readinessProbe` — checks Postgres is accepting connections
-
-Check probe status:
-```bash
-kubectl describe pod <pod-name> -n k8s-program
-```
-
-## Sub-task 3: Deployment strategies
-
-Rolling update strategy on both deployments:
 ```yaml
-strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxSurge: 1        # one extra pod during update
-    maxUnavailable: 0  # no downtime — old pod only removed after new is ready
+metadata:
+  labels:
+    {{- include "kuber-training-chart.labels" . | nindent 4 }}
 ```
 
-`songs-service` was updated with a new `genre` field (v2.0):
-```bash
-# Test genre field
-curl -s -X POST http://localhost:8081/songs \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Bohemian Rhapsody","artist":"Queen","album":"A Night at the Opera","length":"5:55","resourceId":1,"year":"1975","genre":"Rock"}' | jq .
-
-curl -s http://localhost:8081/songs/1 | jq .
+Rendered output example:
+```yaml
+labels:
+  date: "2026-05-06"
+  version: "1.0.0"
 ```
 
-Watch rolling update:
+Preview rendered templates without deploying:
 ```bash
-kubectl rollout status deployment/songs-service-deployment -n k8s-program -w
-```
-
-## Sub-task 4: Deployment history and rollback
-
-View history:
-```bash
-kubectl rollout history deployment/songs-service-deployment -n k8s-program
-```
-
-Roll back to previous version (without changing manifest files):
-```bash
-kubectl rollout undo deployment/songs-service-deployment -n k8s-program
-```
-
-Roll forward to a specific revision:
-```bash
-kubectl rollout undo deployment/songs-service-deployment -n k8s-program --to-revision=<revision>
-```
-
-Verify which image is running:
-```bash
-kubectl describe deployment songs-service-deployment -n k8s-program | grep Image
+helm template kuber-training ./kuber-training-chart
 ```
 
 ## Notes

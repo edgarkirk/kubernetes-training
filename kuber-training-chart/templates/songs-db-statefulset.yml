@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: resources-db
-  namespace: k8s-program
+  name: songs-db
+  namespace: {{ .Values.namespace }}
 spec:
-  serviceName: resources-db
+  serviceName: songs-db
   replicas: 1
   selector:
     matchLabels:
-      app: resources-db
+      app: songs-db
   template:
     metadata:
       labels:
-        app: resources-db
+        app: songs-db
     spec:
       containers:
-        - name: resources-db
+        - name: songs-db
           image: postgres:17
           ports:
             - containerPort: 5432
@@ -25,12 +25,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: resources-db-secret
+                  name: songs-db-secret
                   key: username
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: resources-db-secret
+                  name: songs-db-secret
                   key: password
           startupProbe:
             exec:
@@ -48,17 +48,17 @@ spec:
             periodSeconds: 5
             failureThreshold: 3
           volumeMounts:
-            - name: resources-db-storage
+            - name: songs-db-storage
               mountPath: /var/lib/postgresql/data
-            - name: resources-db-init
+            - name: songs-db-init
               mountPath: /docker-entrypoint-initdb.d
       volumes:
-        - name: resources-db-init
+        - name: songs-db-init
           configMap:
-            name: resources-db-init
+            name: songs-db-init
   volumeClaimTemplates:
     - metadata:
-        name: resources-db-storage
+        name: songs-db-storage
       spec:
         accessModes:
           - ReadWriteOnce

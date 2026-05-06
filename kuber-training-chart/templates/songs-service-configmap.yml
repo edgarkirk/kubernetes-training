@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: songs-service-config
-  namespace: k8s-program
+  namespace: {{ .Values.namespace }}
 data:
   SONGS_MS_NAME: "songs-ms"
   SONGS_MS_PORT: "8081"

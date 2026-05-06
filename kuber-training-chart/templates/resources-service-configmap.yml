@@ -2,7 +2,9 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: resources-service-config
-  namespace: k8s-program
+  namespace: {{ .Values.namespace }}
+  labels: 
+    {{- include "kuber-training-chart.labels" . | nindent 4 }}
 data:
   RESOURCES_MS_NAME: "resources-ms"
   RESOURCES_MS_PORT: "8080"
