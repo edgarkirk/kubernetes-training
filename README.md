@@ -1,6 +1,6 @@
-# Homework 3
+# Homework 4
 
-Helm chart for deploying a two-service app (resources + songs) with separate Postgres databases.
+Helm chart for deploying a two-service app (resources + songs) with separate Postgres databases, exposed via nginx Ingress.
 
 Chart: `kuber-training-chart/` — namespace and replica count are configurable via Helm values.
 
@@ -23,90 +23,72 @@ Chart: `kuber-training-chart/` — namespace and replica count are configurable 
 | `templates/songs-db-service.yml` | ClusterIP service for songs DB |
 | `templates/resources-deployment.yml` | resources-service Deployment |
 | `templates/songs-deployement.yml` | songs-service Deployment |
-| `templates/resource-service.yml` | NodePort service for resources-service |
-| `templates/songs-service.yml` | NodePort service for songs-service |
+| `templates/resource-service.yml` | ClusterIP service for resources-service |
+| `templates/songs-service.yml` | ClusterIP service for songs-service |
 | `templates/songs-pv.yml` | Manually provisioned PersistentVolume for songs-service |
 | `templates/songs-pvc.yml` | PersistentVolumeClaim bound to songs-pv |
+| `templates/ingress.yml` | Nginx ingress with rewrite-target routing for songs and resources |
 
-## Sub-task 1: Helm chart default variables
+## Sub-task 1: Ingress
 
-`replicaCount` and `namespace` are Helm values defined in `values.yaml`:
+### Services changed to ClusterIP
 
-```yaml
-replicaCount: 2
-namespace: k8s-program
-```
+`resource-service.yml` and `songs-service.yml` are `type: ClusterIP` — all external traffic goes through the ingress only.
 
-Deploy with default values:
+### Ingress rewrite-target
+
+Two ingress objects in `templates/ingress.yml`, each with its own `rewrite-target`:
+
+| External path | Internal path |
+|---|---|
+| `http://localhost:8080/api/v1/songs/1` | `songs-service:8081/songs/1` |
+| `http://localhost:8080/api/v1/resources/1` | `resources-service:8080/resources/1` |
+
+The `/api/v1/<service>` prefix is stripped using a regex capture group `$2` in `rewrite-target`.
+
+### Deploy
+
+**Step 1 — Install the app chart (creates the namespace):**
 ```bash
-helm install kuber-training ./kuber-training-chart
+helm install kuber-training . --namespace k8s-program --create-namespace
 ```
 
-Deploy with non-default values:
+**Step 2 — Install ingress controller into the same namespace:**
 ```bash
-helm install kuber-training ./kuber-training-chart \
-  --set namespace=my-ns \
-  --set replicaCount=3
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace k8s-program
 ```
 
-Verify pods are running:
+Wait until running:
 ```bash
-kubectl get pods -n k8s-program
+kubectl get pods -n k8s-program -w
 ```
 
-Upgrade an existing release:
+### Verify the rewrite
+
+**Step 1 — Backend does NOT support `/api/v1/songs/1`:**
 ```bash
-helm upgrade kuber-training ./kuber-training-chart
+kubectl port-forward svc/songs-service 8081:8081 -n k8s-program
+curl -i http://localhost:8081/api/v1/songs/1
+# Expected: 404
 ```
 
-Uninstall:
+**Step 2 — Backend DOES support `/songs/1`:**
 ```bash
-helm uninstall kuber-training
+curl -i http://localhost:8081/songs/1
+# Expected: 200
 ```
 
-Fix PersistentVolume if `songs-pvc` stays Pending (after namespace recreate):
+**Step 3 — Ingress rewrites `/api/v1/songs/1` → `/songs/1`:**
 ```bash
-kubectl patch pv songs-pv -p '{"spec":{"claimRef":null}}'
+kubectl port-forward -n k8s-program svc/ingress-nginx-controller 8080:80
+curl -i http://localhost:8080/api/v1/songs/1
+# Expected: 200
 ```
 
-## Sub-task 2: Helm chart helpers
+### Cleanup
 
-`templates/_helpers.tpl` defines a named template with two labels:
-
-```gotemplate
-{{- define "kuber-training-chart.labels" -}}
-date: {{ now | date "2006-01-02" | quote }}
-version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-```
-
-- `date` — generated at render time using Helm's `now` function
-- `version` — taken from `appVersion` in `Chart.yaml`
-
-`resources-service-configmap.yml` includes the labels:
-
-```yaml
-metadata:
-  labels:
-    {{- include "kuber-training-chart.labels" . | nindent 4 }}
-```
-
-Rendered output example:
-```yaml
-labels:
-  date: "2026-05-06"
-  version: "1.0.0"
-```
-
-Preview rendered templates without deploying:
 ```bash
-helm template kuber-training ./kuber-training-chart
+helm uninstall kuber-training -n k8s-program
+helm uninstall ingress-nginx -n k8s-program
+kubectl delete namespace k8s-program
 ```
-
-## Notes
-
-- Databases use StatefulSets so storage is stable across restarts
-- Services communicate via Kubernetes DNS (`songs-service`, `resources-db`, etc.)
-- Eureka is disabled — no service discovery needed inside the cluster
-- `ddl-auto=update` overridden via ConfigMap to prevent table drops during rolling updates
-- Actuator health endpoint available at `/actuator/health` (exposed via `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=*`)

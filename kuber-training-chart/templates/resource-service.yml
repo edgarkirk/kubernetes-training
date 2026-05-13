@@ -4,10 +4,9 @@ metadata:
   name: resources-service
   namespace: {{ .Values.namespace }}
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: resources-service
   ports:
     - port: 8080
       targetPort: 8080
-      nodePort: 30080
